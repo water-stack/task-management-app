@@ -1,25 +1,50 @@
-import logo from './logo.svg';
-import './App.css';
+// App.js (updated if needed)
+import React, { useContext } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthContext } from "./context/AuthContext";
+import AuthPage from "./components/AuthPage";
+import Dashboard from "./components/Dashboard";
 
-function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
+function PrivateRoute({ children }) {
+  const { user } = useContext(AuthContext);
+  return user ? children : <Navigate to="/auth" />;
 }
 
-export default App;
+function PublicRoute({ children }) {
+  const { user } = useContext(AuthContext);
+  return user ? <Navigate to="/dashboard" /> : children;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter> 
+      <Routes>
+        {/* Default Redirect */}
+        <Route path="/" element={<Navigate to="/auth" />} />
+
+        {/* Auth Page (Login/Register) */}
+        <Route
+          path="/auth"
+          element={
+            <PublicRoute>
+              <AuthPage />
+            </PublicRoute>
+          }
+        />
+
+        {/* Dashboard (Private) */}
+        <Route
+          path="/dashboard"
+          element={
+            <PrivateRoute>
+              <Dashboard />
+            </PrivateRoute>
+          }
+        />
+
+        {/* Catch-all route */}
+        <Route path="*" element={<Navigate to="/auth" />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
