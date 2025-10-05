@@ -19,6 +19,7 @@ export default function AuthPage() {
     signup: false,
     confirm: false
   });
+  const [loading, setLoading] = useState(false);
 
   const handleLoginChange = (e) => {
     const { name, value } = e.target;
@@ -60,24 +61,45 @@ export default function AuthPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     if (validateLogin()) {
-      login(loginData.username, loginData.password);
+      setLoading(true);
+      try {
+        const result = await login(loginData.username, loginData.password);
+        if (!result.success) {
+          setErrors({ loginError: result.message });
+        }
+      } catch (error) {
+        setErrors({ loginError: error.message || 'Login failed' });
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  const handleSignup = (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
     if (validateSignup()) {
-      signup(signupData.username, signupData.email, signupData.password);
-      setSuccessMessage("Account created successfully!");
-      setTimeout(() => {
-        setSuccessMessage("");
-        setActiveTab("login");
-        // Reset signup form
-        setSignupData({ username: "", email: "", password: "", confirmPassword: "" });
-      }, 3000);
+      setLoading(true);
+      try {
+        const result = await signup(signupData.username, signupData.email, signupData.password);
+        if (result.success) {
+          setSuccessMessage("Account created successfully!");
+          setTimeout(() => {
+            setSuccessMessage("");
+            setActiveTab("login");
+            // Reset signup form
+            setSignupData({ username: "", email: "", password: "", confirmPassword: "" });
+          }, 3000);
+        } else {
+          setErrors({ signupError: result.message });
+        }
+      } catch (error) {
+        setErrors({ signupError: error.message || 'Registration failed' });
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -161,6 +183,12 @@ export default function AuthPage() {
                 )}
               </div>
 
+              {errors.loginError && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                  {errors.loginError}
+                </div>
+              )}
+
               <div className="text-right mb-2">
                 <a href="#" className="text-sm text-indigo-600 hover:underline">
                   Forgot Password?
@@ -169,9 +197,10 @@ export default function AuthPage() {
 
               <button
                 type="submit"
-                className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors shadow-md"
+                disabled={loading}
+                className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Login
+                {loading ? "Logging in..." : "Login"}
               </button>
 
               <div className="relative my-6">
@@ -229,6 +258,12 @@ export default function AuthPage() {
               {successMessage && (
                 <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative">
                   {successMessage}
+                </div>
+              )}
+
+              {errors.signupError && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                  {errors.signupError}
                 </div>
               )}
 
@@ -320,9 +355,10 @@ export default function AuthPage() {
 
               <button
                 type="submit"
-                className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors shadow-md"
+                disabled={loading}
+                className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Create Account
+                {loading ? "Creating Account..." : "Create Account"}
               </button>
 
               <div className="relative my-6">

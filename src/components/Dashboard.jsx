@@ -1,6 +1,7 @@
 // components/Dashboard.jsx
-import React, { useState, useContext, useEffect } from "react";
+import React, { useState, useContext, useEffect, useCallback } from "react";
 import { AuthContext } from "../context/AuthContext";
+import { apiService } from "../services/api";
 import AddTaskModal from "./AddTaskModal";
 import TaskItem from "./TaskItem";
 import StatCard from "./StatCard";
@@ -35,47 +36,96 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [categories] = useState(["Work", "Personal", "Shopping", "Health", "Finance", "Other"]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Load tasks from localStorage on component mount
-  useEffect(() => {
-    const savedTasks = localStorage.getItem('tasks');
-    if (savedTasks) {
-      setTasks(JSON.parse(savedTasks));
+  const loadTasks = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const filters = {
+        ...(filter !== "all" && { completed: filter === "completed" }),
+        ...(selectedCategory !== "all" && { category: selectedCategory }),
+        ...(searchQuery && { search: searchQuery }),
+        // Map UI 'date' to API 'createdAt'
+        sort: sortBy === "date" ? "createdAt" : sortBy,
+        order: "desc"
+      };
+
+      const response = await apiService.getTasks(filters);
+      if (response.success) {
+        setTasks(response.data);
+      }
+    } catch (error) {
+      setError(error.message || 'Failed to load tasks');
+      console.error('Error loading tasks:', error);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [filter, selectedCategory, searchQuery, sortBy]);
 
-  // Save tasks to localStorage whenever tasks change
+  // Load tasks from API on component mount and when filters change
   useEffect(() => {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-  }, [tasks]);
+    loadTasks();
+  }, [loadTasks]);
 
-  const addTask = (task) => {
-    const newTask = { 
-      ...task, 
-      id: Date.now(), 
-      completed: false,
-      createdAt: new Date().toISOString()
-    };
-    setTasks([...tasks, newTask]);
-    setShowModal(false);
+  const addTask = async (task) => {
+    try {
+      setError(null);
+      const response = await apiService.createTask(task);
+
+      if (response.success) {
+        setTasks([...tasks, response.data]);
+        setShowModal(false);
+      }
+    } catch (error) {
+      setError(error.message || 'Failed to create task');
+      console.error('Error creating task:', error);
+    }
   };
 
-  const toggleTask = (id) => {
-    setTasks(
-      tasks.map((task) =>
-        task.id === id ? { ...task, completed: !task.completed } : task
-      )
-    );
+  const toggleTask = async (id) => {
+    try {
+      setError(null);
+      const response = await apiService.toggleTask(id);
+
+      if (response.success) {
+        setTasks(tasks.map(task =>
+          (task.id || task._id) === id ? response.data : task
+        ));
+      }
+    } catch (error) {
+      setError(error.message || 'Failed to toggle task');
+      console.error('Error toggling task:', error);
+    }
   };
 
-  const deleteTask = (id) => setTasks(tasks.filter((task) => task.id !== id));
+  const deleteTask = async (id) => {
+    try {
+      setError(null);
+      await apiService.deleteTask(id);
+      setTasks(tasks.filter((task) => (task.id || task._id) !== id));
+    } catch (error) {
+      setError(error.message || 'Failed to delete task');
+      console.error('Error deleting task:', error);
+    }
+  };
 
-  const editTask = (id, updatedTask) => {
-    setTasks(
-      tasks.map((task) =>
-        task.id === id ? { ...task, ...updatedTask } : task
-      )
-    );
+  const editTask = async (id, updatedTask) => {
+    try {
+      setError(null);
+      const response = await apiService.updateTask(id, updatedTask);
+
+      if (response.success) {
+        setTasks(tasks.map(task =>
+          (task.id || task._id) === id ? response.data : task
+        ));
+      }
+    } catch (error) {
+      setError(error.message || 'Failed to update task');
+      console.error('Error updating task:', error);
+    }
   };
 
   // Filter tasks based on selected filter, category, and search query
@@ -110,9 +160,14 @@ export default function Dashboard() {
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter((t) => t.completed).length;
   const pendingTasks = totalTasks - completedTasks;
-  const highPriorityTasks = tasks.filter((t) => t.priority === "high" && !t.completed).length;
   const today = new Date().toISOString().split('T')[0];
-  const dueToday = tasks.filter((t) => t.dueDate === today && !t.completed).length;
+  const dueToday = tasks.filter((t) => {
+    if (!t.dueDate) return false;
+    const d = new Date(t.dueDate);
+    if (isNaN(d)) return false;
+    const taskDate = d.toISOString().split('T')[0];
+    return taskDate === today && !t.completed;
+  }).length;
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -221,16 +276,44 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              {sortedTasks.map((task) => (
-                <TaskItem
-                  key={task.id}
-                  task={task}
-                  onToggle={toggleTask}
-                  onDelete={deleteTask}
-                  onEdit={editTask}
-                  categories={categories}
-                />
-              ))}
+              {loading ? (
+                <div className="text-center py-10">
+                  <div className="text-lg">Loading tasks...</div>
+                </div>
+              ) : error ? (
+                <div className="text-center py-10">
+                  <div className="text-red-600 text-lg mb-2">Error: {error}</div>
+                  <button
+                    onClick={loadTasks}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : sortedTasks.length === 0 ? (
+                <div className="text-center py-10">
+                  <div className="text-5xl mb-4">📝</div>
+                  <h3 className="text-xl font-semibold text-gray-700">No tasks found</h3>
+                  <p className="text-gray-500">
+                    {searchQuery || selectedCategory !== "all" || filter !== "all"
+                      ? "Try changing your filters or search query"
+                      : "Get started by adding your first task"}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {sortedTasks.map((task) => (
+                    <TaskItem
+                      key={(task.id || task._id)}
+                      task={task}
+                      onToggle={toggleTask}
+                      onDelete={deleteTask}
+                      onEdit={editTask}
+                      categories={categories}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -248,7 +331,7 @@ export default function Dashboard() {
               .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
               .slice(0, 4)
               .map((task) => (
-                <div key={task.id} className="border rounded-lg p-4 flex justify-between items-center">
+                <div key={(task.id || task._id)} className="border rounded-lg p-4 flex justify-between items-center">
                   <div>
                     <h3 className="font-medium">{task.title}</h3>
                     <p className="text-sm text-gray-500">

@@ -6,12 +6,18 @@ import AuthPage from "./components/AuthPage";
 import Dashboard from "./components/Dashboard";
 
 function PrivateRoute({ children }) {
-  const { user } = useContext(AuthContext);
+  const { user, loading } = useContext(AuthContext);
+  if (loading) {
+    return <div style={{ padding: 24, textAlign: 'center' }}>Loading...</div>;
+  }
   return user ? children : <Navigate to="/auth" />;
 }
 
 function PublicRoute({ children }) {
-  const { user } = useContext(AuthContext);
+  const { user, loading } = useContext(AuthContext);
+  if (loading) {
+    return <div style={{ padding: 24, textAlign: 'center' }}>Loading...</div>;
+  }
   return user ? <Navigate to="/dashboard" /> : children;
 }
 
